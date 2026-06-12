@@ -1,0 +1,121 @@
+# RK_PBRPacker by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name PBR_Packer
+ tile_color 0x33cc99ff
+ addUserKnob {20 Settings}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit PBR Packer</b>\nPacks UniVidX + DVD passes into layers.\n\nInputs:\n0=Albedo, 1=Normal, 2=Irradiance,\n3=Alpha, 4=Depth, 5=Source/RGB"}
+}
+ Input {
+  inputs 0
+  name Depth
+  xpos 103
+  ypos -209
+  number 4
+ }
+ Input {
+  inputs 0
+  name Alpha
+  xpos -29
+  ypos -209
+  number 3
+ }
+ Input {
+  inputs 0
+  name Irradiance
+  xpos -160
+  ypos -209
+  number 2
+ }
+ Input {
+  inputs 0
+  name Normal
+  xpos -280
+  ypos -209
+  number 1
+ }
+ Input {
+  inputs 0
+  name Albedo
+  xpos -400
+  ypos -209
+ }
+ Input {
+  inputs 0
+  name Source
+  xpos -520
+  ypos -209
+  number 5
+ }
+ Dot {
+  name Dot1
+  xpos -486
+  ypos 74
+ }
+add_layer {Basecolor Basecolor.red Basecolor.green Basecolor.blue}
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Basecolor.red
+  from1 rgba.green
+  to1 Basecolor.green
+  from2 rgba.blue
+  to2 Basecolor.blue
+  name CopyAlbedo
+  label Albedo→Basecolor
+  xpos -400
+  ypos 47
+ }
+add_layer {Normal Normal.red Normal.green Normal.blue}
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Normal.red
+  from1 rgba.green
+  to1 Normal.green
+  from2 rgba.blue
+  to2 Normal.blue
+  name CopyNormal
+  label Normal
+  xpos -280
+  ypos 47
+ }
+add_layer {Irradiance Irradiance.red Irradiance.green Irradiance.blue}
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Irradiance.red
+  from1 rgba.green
+  to1 Irradiance.green
+  from2 rgba.blue
+  to2 Irradiance.blue
+  name CopyIrradiance
+  label Irradiance
+  xpos -160
+  ypos 47
+ }
+add_layer {Alpha Alpha.red}
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Alpha.red
+  name CopyAlpha
+  label Alpha
+  xpos -29
+  ypos 59
+ }
+add_layer {Depth Depth.red}
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Depth.red
+  name CopyDepth
+  label Depth
+  xpos 108
+  ypos 59
+ }
+ Output {
+  name Output1
+  xpos 108
+  ypos 268
+ }
+end_group

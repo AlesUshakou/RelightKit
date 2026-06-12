@@ -1,0 +1,193 @@
+# RK_PointLightDepth by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name RK_PointLightDepth
+ tile_color 0x9933ccff
+ inputs 1
+ addUserKnob {20 light_control l "Light Control"}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit Point Light (Depth)</b>\n3D-ish point light. P is built internally as (x/width, y/height, Depth).\nPlace with the on-screen Anchor handle, push it in depth with Offset Z.\nInput: PBR packed stream (must contain a Depth layer)."}
+ addUserKnob {18 lightColor l "Color"}
+ lightColor {1 1 1}
+ addUserKnob {6 lightColor_panelDropped l "panel dropped state" -STARTLINE +HIDDEN}
+ addUserKnob {7 lightIntensity l "Intensity" R 0 20}
+ lightIntensity 1
+ addUserKnob {26 divider1 l "" +STARTLINE T "Placement"}
+ addUserKnob {12 light_pos l "Anchor (screen)"}
+ light_pos {0 0}
+ addUserKnob {7 offset_z l "Offset Z (Depth)" R -1 1}
+ offset_z 0
+ addUserKnob {22 freeze_depth l "Freeze Depth" t "Sample the Depth under the Anchor handle and lock it so it stops recomputing." T "import nuke\n\nn = nuke.thisNode()\nx = n.knob('light_pos').value(0)\ny = n.knob('light_pos').value(1)\n\nv = None\ntry:\n    v = n.node('SDepth').sample('red', x, y)\nexcept Exception:\n    try:\n        v = n.input(0).sample('Depth.red', x, y)\n    except Exception:\n        v = None\n\nif v is not None:\n    n.knob('frozen_depth').setValue(float(v))\n    n.knob('use_frozen').setValue(True)\nelse:\n    nuke.message('Could not sample Depth under the handle.')" +STARTLINE}
+ addUserKnob {6 use_frozen l "Use Frozen Depth" +STARTLINE}
+ use_frozen false
+ addUserKnob {7 frozen_depth l "Frozen Depth" R 0 1}
+ frozen_depth 0
+ addUserKnob {26 divider2 l "" +STARTLINE T "Radius / Falloff"}
+ addUserKnob {7 radius_h l "Radius H" R 0 20}
+ radius_h 2
+ addUserKnob {7 radius_v l "Radius V" R 0 20}
+ radius_v 2
+ addUserKnob {7 depth_radius l "Depth Radius" R 0 20}
+ depth_radius 5
+ addUserKnob {7 lightDecay l "Decay" R 0 4}
+ lightDecay 2
+ addUserKnob {7 softness l "Edge Softness" R 0 1}
+ softness 0.7
+ addUserKnob {26 divider2b l "" +STARTLINE T "Anti-aliasing (depth edges)"}
+ addUserKnob {4 aa_method l "AA Method" M {"None" "Soften Depth" "Supersample"}}
+ aa_method 2
+ addUserKnob {7 aa_radius l "AA Radius (px)" R 0 4}
+ aa_radius 1
+ addUserKnob {26 divider3 l "" +STARTLINE T "Surface"}
+ addUserKnob {6 normal_signed l "Normals already signed (-1..1)" +STARTLINE}
+ normal_signed false
+ addUserKnob {7 wrap l "Wrap" R 0 1}
+ wrap 0
+ addUserKnob {26 divider4 l "" +STARTLINE T "Output"}
+ addUserKnob {6 light_only l "Light only (no albedo)" +STARTLINE}
+ light_only false
+ addUserKnob {7 original_mix l "Original Light" R 0 1}
+ original_mix 0
+}
+ Input {
+  inputs 0
+  name PBR
+  xpos 300
+  ypos 0
+ }
+ Dot {
+  name Dot1
+  xpos 334
+  ypos 40
+ }
+set Nin [stack 0]
+add_layer {Basecolor Basecolor.red Basecolor.green Basecolor.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Basecolor
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Basecolor.red 0 0 rgba.red 0 0 Basecolor.green 0 1 rgba.green 0 1 Basecolor.blue 0 2 rgba.blue 0 2"
+  name SBase
+  xpos 0
+  ypos 100
+ }
+set vBase [stack 0]
+push $Nin
+add_layer {Normal Normal.red Normal.green Normal.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name SNorm
+  xpos 120
+  ypos 100
+ }
+set vNorm [stack 0]
+push $Nin
+add_layer {Irradiance Irradiance.red Irradiance.green Irradiance.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name SIrr
+  xpos 240
+  ypos 100
+ }
+set vIrr [stack 0]
+push $Nin
+add_layer {Roughness Roughness.red Roughness.green Roughness.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Roughness
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Roughness.red 0 0 rgba.red 0 0 Roughness.green 0 1 rgba.green 0 1 Roughness.blue 0 2 rgba.blue 0 2"
+  name SRough
+  xpos 360
+  ypos 100
+ }
+set vRough [stack 0]
+push $Nin
+add_layer {Metallic Metallic.red Metallic.green Metallic.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Metallic
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Metallic.red 0 0 rgba.red 0 0 Metallic.green 0 1 rgba.green 0 1 Metallic.blue 0 2 rgba.blue 0 2"
+  name SMetal
+  xpos 480
+  ypos 100
+ }
+set vMetal [stack 0]
+push $Nin
+add_layer {Specular Specular.red Specular.green Specular.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Specular
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Specular.red 0 0 rgba.red 0 0 Specular.green 0 1 rgba.green 0 1 Specular.blue 0 2 rgba.blue 0 2"
+  name SSpec
+  xpos 600
+  ypos 100
+ }
+set vSpec [stack 0]
+push $Nin
+add_layer {Depth Depth.red Depth.green Depth.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Depth
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Depth.red 0 0 rgba.red 0 0 Depth.green 0 1 rgba.green 0 1 Depth.blue 0 2 rgba.blue 0 2"
+  name SDepth
+  xpos 720
+  ypos 100
+ }
+set vDepth [stack 0]
+
+ push $vDepth
+ push $vSpec
+ push $vMetal
+ push $vRough
+ push $vIrr
+ push $vNorm
+ push $vBase
+ BlinkScript {
+  inputs 7
+  recompileCount 1
+  ProgramGroup 1
+  kernelSource "kernel GGXPointLightDepth : ImageComputationKernel<ePixelWise>\n\{\n    Image<eRead, eAccessPoint, eEdgeClamped> baseImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> normalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> irradImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> roughImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> metalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> specImg;\n    Image<eRead, eAccessRandom, eEdgeClamped> depthImg;\n    Image<eWrite, eAccessPoint> outImg;\n\n    param:\n        float2 anchorUV;\n        float  offsetZ;\n        float  useFrozen;\n        float  frozenDepth;\n        float  radiusH;\n        float  radiusV;\n        float  depthRadius;\n        float  decay;\n        float  softness;\n        float  aaMethod;\n        float  aaRadius;\n        float  normalSigned;\n        float  lightOnly;\n        float3 lightColor;\n        float  intensity;\n        float  wrapAmount;\n        float  originalMix;\n\n    local:\n        int2 imgSize;\n\n    void define()\n    \{\n        defineParam(anchorUV,    \"anchorUV\",    float2(0.5f, 0.5f));\n        defineParam(offsetZ,     \"offsetZ\",     0.0f);\n        defineParam(useFrozen,   \"useFrozen\",   0.0f);\n        defineParam(frozenDepth, \"frozenDepth\", 0.0f);\n        defineParam(radiusH,     \"radiusH\",     2.0f);\n        defineParam(radiusV,     \"radiusV\",     2.0f);\n        defineParam(depthRadius, \"depthRadius\", 5.0f);\n        defineParam(decay,       \"decay\",       2.0f);\n        defineParam(softness,    \"softness\",    0.7f);\n        defineParam(aaMethod,    \"aaMethod\",    2.0f);\n        defineParam(aaRadius,    \"aaRadius\",    1.0f);\n        defineParam(normalSigned,\"normalSigned\",0.0f);\n        defineParam(lightOnly,   \"lightOnly\",   0.0f);\n        defineParam(lightColor,  \"lightColor\",  float3(1.0f, 1.0f, 1.0f));\n        defineParam(intensity,   \"intensity\",   1.0f);\n        defineParam(wrapAmount,  \"wrapAmount\",  0.0f);\n        defineParam(originalMix, \"originalMix\", 0.0f);\n    \}\n\n    void init()\n    \{\n        imgSize = outImg.bounds.size();\n    \}\n\n    void process(int2 pos)\n    \{\n        float pi = 3.14159265358979f;\n\n        float sx = float(pos.x) / float(imgSize.x);\n        float sy = float(pos.y) / float(imgSize.y);\n\n        int hx = int(anchorUV.x * float(imgSize.x));\n        int hy = int(anchorUV.y * float(imgSize.y));\n        hx = max(0, min(hx, imgSize.x - 1));\n        hy = max(0, min(hy, imgSize.y - 1));\n        float depthA;\n        if (useFrozen > 0.5f) depthA = frozenDepth;\n        else depthA = depthImg(hx, hy).x;\n        float lightZ = depthA + offsetZ;\n\n        float rx = max(radiusH * 0.1f, 0.0001f);\n        float ry = max(radiusV * 0.1f, 0.0001f);\n        float rz = max(depthRadius * 0.1f, 0.0001f);\n        float inner = clamp(1.0f - softness, 0.0f, 1.0f);\n        float invInner = max(1.0f - inner, 0.0001f);\n\n        int aaStep = int(max(aaRadius, 0.0f) + 0.5f);\n        if (aaStep < 1) aaStep = 1;\n\n        float depthPc = depthImg(pos.x, pos.y).x;\n\n        float atten = 0.0f;\n        if (aaMethod < 0.5f)\n        \{\n            float dz = lightZ - depthPc;\n            float ex = (anchorUV.x - sx) / rx;\n            float ey = (anchorUV.y - sy) / ry;\n            float ez = dz / rz;\n            float nd = sqrt(ex * ex + ey * ey + ez * ez);\n            float tt = clamp(nd, 0.0f, 1.0f);\n            float xx = clamp((tt - inner) / invInner, 0.0f, 1.0f);\n            float smv = xx * xx * (3.0f - 2.0f * xx);\n            atten = pow(1.0f - smv, decay);\n        \}\n        else if (aaMethod < 1.5f)\n        \{\n            float dsum = 0.0f;\n            float cnt = 0.0f;\n            for (int jj = -1; jj <= 1; jj = jj + 1)\n            \{\n                for (int ii = -1; ii <= 1; ii = ii + 1)\n                \{\n                    int tx = max(0, min(pos.x + ii * aaStep, imgSize.x - 1));\n                    int ty = max(0, min(pos.y + jj * aaStep, imgSize.y - 1));\n                    dsum = dsum + depthImg(tx, ty).x;\n                    cnt = cnt + 1.0f;\n                \}\n            \}\n            float dp = dsum / cnt;\n            float dz = lightZ - dp;\n            float ex = (anchorUV.x - sx) / rx;\n            float ey = (anchorUV.y - sy) / ry;\n            float ez = dz / rz;\n            float nd = sqrt(ex * ex + ey * ey + ez * ez);\n            float tt = clamp(nd, 0.0f, 1.0f);\n            float xx = clamp((tt - inner) / invInner, 0.0f, 1.0f);\n            float smv = xx * xx * (3.0f - 2.0f * xx);\n            atten = pow(1.0f - smv, decay);\n        \}\n        else\n        \{\n            float fsum = 0.0f;\n            float cnt = 0.0f;\n            for (int jj = -1; jj <= 1; jj = jj + 1)\n            \{\n                for (int ii = -1; ii <= 1; ii = ii + 1)\n                \{\n                    int tx = max(0, min(pos.x + ii * aaStep, imgSize.x - 1));\n                    int ty = max(0, min(pos.y + jj * aaStep, imgSize.y - 1));\n                    float dp = depthImg(tx, ty).x;\n                    float sxt = float(tx) / float(imgSize.x);\n                    float syt = float(ty) / float(imgSize.y);\n                    float dz = lightZ - dp;\n                    float ex = (anchorUV.x - sxt) / rx;\n                    float ey = (anchorUV.y - syt) / ry;\n                    float ez = dz / rz;\n                    float nd = sqrt(ex * ex + ey * ey + ez * ez);\n                    float tt = clamp(nd, 0.0f, 1.0f);\n                    float xx = clamp((tt - inner) / invInner, 0.0f, 1.0f);\n                    float smv = xx * xx * (3.0f - 2.0f * xx);\n                    fsum = fsum + pow(1.0f - smv, decay);\n                    cnt = cnt + 1.0f;\n                \}\n            \}\n            atten = fsum / cnt;\n        \}\n\n        float3 toLight = float3(anchorUV.x - sx, anchorUV.y - sy, lightZ - depthPc);\n        float3 L = normalize(toLight);\n        float3 V = float3(0.0f, 0.0f, 1.0f);\n        float3 Hh = normalize(L + V);\n\n        float3 N = normalImg().xyz;\n        if (normalSigned < 0.5f) N = N * 2.0f - 1.0f;\n        N = normalize(N);\n\n        float NdotL = max(dot(N, L), 0.0f);\n        float NdotV = max(dot(N, V), 0.0001f);\n        float NdotH = max(dot(N, Hh), 0.0f);\n        float VdotH = max(dot(V, Hh), 0.0f);\n\n        float rough = clamp(roughImg().x, 0.03f, 1.0f);\n        float a  = rough * rough;\n        float a2 = a * a;\n        float metal = clamp(metalImg().x, 0.0f, 1.0f);\n        float specv = clamp(specImg().x, 0.0f, 1.0f);\n        float3 albedo = baseImg().xyz;\n\n        if (lightOnly > 0.5f)\n        \{\n            albedo = float3(1.0f, 1.0f, 1.0f);\n            metal = 0.0f;\n        \}\n\n        float f0d = 0.08f * specv;\n        float3 F0;\n        F0.x = f0d * (1.0f - metal) + albedo.x * metal;\n        F0.y = f0d * (1.0f - metal) + albedo.y * metal;\n        F0.z = f0d * (1.0f - metal) + albedo.z * metal;\n\n        float denom = NdotH * NdotH * (a2 - 1.0f) + 1.0f;\n        float D = a2 / (pi * denom * denom + 0.0001f);\n\n        float k = a * 0.5f;\n        float gv = NdotV / (NdotV * (1.0f - k) + k);\n        float gl = NdotL / (NdotL * (1.0f - k) + k);\n        float G = gv * gl;\n\n        float fc = pow(1.0f - VdotH, 5.0f);\n        float3 F;\n        F.x = F0.x + (1.0f - F0.x) * fc;\n        F.y = F0.y + (1.0f - F0.y) * fc;\n        F.z = F0.z + (1.0f - F0.z) * fc;\n\n        float sd = 4.0f * NdotL * NdotV + 0.0001f;\n        float3 spec;\n        spec.x = D * G * F.x / sd;\n        spec.y = D * G * F.y / sd;\n        spec.z = D * G * F.z / sd;\n\n        float3 diff;\n        diff.x = (1.0f - F.x) * (1.0f - metal) * albedo.x / pi;\n        diff.y = (1.0f - F.y) * (1.0f - metal) * albedo.y / pi;\n        diff.z = (1.0f - F.z) * (1.0f - metal) * albedo.z / pi;\n\n        float wrapNL = clamp((dot(N, L) + wrapAmount) / (1.0f + wrapAmount), 0.0f, 1.0f);\n\n        float3 rad;\n        rad.x = lightColor.x * intensity;\n        rad.y = lightColor.y * intensity;\n        rad.z = lightColor.z * intensity;\n\n        float3 newTerm;\n        newTerm.x = (diff.x * wrapNL + spec.x * NdotL) * atten * rad.x;\n        newTerm.y = (diff.y * wrapNL + spec.y * NdotL) * atten * rad.y;\n        newTerm.z = (diff.z * wrapNL + spec.z * NdotL) * atten * rad.z;\n\n        float omix = originalMix;\n        if (lightOnly > 0.5f) omix = 0.0f;\n\n        float3 irrad = irradImg().xyz;\n        float3 orig;\n        orig.x = baseImg().x * irrad.x;\n        orig.y = baseImg().y * irrad.y;\n        orig.z = baseImg().z * irrad.z;\n\n        float3 result;\n        result.x = newTerm.x * (1.0f - omix) + orig.x * omix;\n        result.y = newTerm.y * (1.0f - omix) + orig.y * omix;\n        result.z = newTerm.z * (1.0f - omix) + orig.z * omix;\n\n        outImg() = float4(result.x, result.y, result.z, 1.0f);\n    \}\n\};\n"
+  rebuild ""
+  GGXPointLightDepth_anchorUV {{"parent.light_pos.x / PBR.width"} {"parent.light_pos.y / PBR.height"}}
+  GGXPointLightDepth_offsetZ {{parent.offset_z}}
+  GGXPointLightDepth_useFrozen {{parent.use_frozen}}
+  GGXPointLightDepth_frozenDepth {{parent.frozen_depth}}
+  GGXPointLightDepth_radiusH {{parent.radius_h}}
+  GGXPointLightDepth_radiusV {{parent.radius_v}}
+  GGXPointLightDepth_depthRadius {{parent.depth_radius}}
+  GGXPointLightDepth_decay {{parent.lightDecay}}
+  GGXPointLightDepth_softness {{parent.softness}}
+  GGXPointLightDepth_aaMethod {{parent.aa_method}}
+  GGXPointLightDepth_aaRadius {{parent.aa_radius}}
+  GGXPointLightDepth_normalSigned {{parent.normal_signed}}
+  GGXPointLightDepth_lightOnly {{parent.light_only}}
+  GGXPointLightDepth_lightColor {{parent.lightColor.r} {parent.lightColor.g} {parent.lightColor.b}}
+  GGXPointLightDepth_intensity {{parent.lightIntensity}}
+  GGXPointLightDepth_wrapAmount {{parent.wrap}}
+  GGXPointLightDepth_originalMix {{parent.original_mix}}
+  rebuild_finalise ""
+  name PointLightDepthBlink
+  xpos 300
+  ypos 280
+ }
+ Output {
+  name Output1
+  xpos 300
+  ypos 380
+ }
+end_group

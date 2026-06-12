@@ -1,0 +1,99 @@
+# RK_LightMerge by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name RK_LightMerge
+ tile_color 0xcc6633ff
+ inputs 5
+ addUserKnob {20 Settings}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit Light Merge</b>\nCombines multiple relit outputs.\nConnect lights to inputs A-E.\nDefault 'plus' = additive light (physically correct)."}
+ addUserKnob {41 operation l "Operation" T MergeAB.operation}
+ addUserKnob {7 overall_intensity l "Master Intensity" R 0 3}
+ overall_intensity 1
+}
+ Input {
+  inputs 0
+  name A
+  xpos 100
+  ypos 0
+ }
+set Na [stack 0]
+ Input {
+  inputs 0
+  name B
+  xpos 220
+  ypos 0
+  number 1
+ }
+set Nb [stack 0]
+ Input {
+  inputs 0
+  name C
+  xpos 340
+  ypos 0
+  number 2
+ }
+set Nc [stack 0]
+ Input {
+  inputs 0
+  name D
+  xpos 460
+  ypos 0
+  number 3
+ }
+set Nd [stack 0]
+ Input {
+  inputs 0
+  name E
+  xpos 580
+  ypos 0
+  number 4
+ }
+set Ne [stack 0]
+push $Na
+push $Nb
+ Merge2 {
+  inputs 2
+  operation plus
+  name MergeAB
+  bbox union
+  xpos 100
+  ypos 100
+ }
+push $Nc
+ Merge2 {
+  inputs 2
+  operation {{MergeAB.operation}}
+  name MergeABC
+  bbox union
+  xpos 100
+  ypos 160
+ }
+push $Nd
+ Merge2 {
+  inputs 2
+  operation {{MergeAB.operation}}
+  name MergeABCD
+  bbox union
+  xpos 100
+  ypos 220
+ }
+push $Ne
+ Merge2 {
+  inputs 2
+  operation {{MergeAB.operation}}
+  name MergeABCDE
+  bbox union
+  xpos 100
+  ypos 280
+ }
+ Grade {
+  multiply {{parent.overall_intensity} {parent.overall_intensity} {parent.overall_intensity} 1}
+  name MasterGrade
+  xpos 100
+  ypos 340
+ }
+ Output {
+  name Output1
+  xpos 100
+  ypos 420
+ }
+end_group

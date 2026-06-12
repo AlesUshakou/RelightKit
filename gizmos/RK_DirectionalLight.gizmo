@@ -1,0 +1,147 @@
+# RK_DirectionalLight by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name RK_DirectionalLight
+ tile_color 0xcc66ffff
+ inputs 1
+ addUserKnob {20 light_control l "Light Control"}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit Directional Light</b>\nGGX relighting (reads Roughness/Metallic/Specular)."}
+ addUserKnob {18 lightColor l "Color"}
+ lightColor {1 1 1}
+ addUserKnob {6 lightColor_panelDropped l "panel dropped state" -STARTLINE +HIDDEN}
+ addUserKnob {7 lightIntensity l "Intensity" R 0 10}
+ lightIntensity 1
+ addUserKnob {26 divider1 l "" +STARTLINE}
+ addUserKnob {7 lightHorizontal l "Horizontal" R 0 360}
+ lightHorizontal 180
+ addUserKnob {7 lightVertical l "Vertical" R -90 90}
+ lightVertical 45
+ addUserKnob {26 divider2 l "" +STARTLINE T "Blending"}
+ addUserKnob {7 original_mix l "Original Light" R 0 1}
+ original_mix 0
+ addUserKnob {7 wrap l "Wrap" R 0 1}
+ wrap 0
+ addUserKnob {26 divider3 l "" +STARTLINE T "Output"}
+ addUserKnob {6 light_only l "Light only (no albedo)" +STARTLINE}
+ light_only false
+}
+ Input {
+  inputs 0
+  name PBR
+  xpos 300
+  ypos 0
+ }
+ Dot {
+  name Dot1
+  xpos 334
+  ypos 40
+ }
+set Nin [stack 0]
+add_layer {Basecolor Basecolor.red Basecolor.green Basecolor.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Basecolor
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Basecolor.red 0 0 rgba.red 0 0 Basecolor.green 0 1 rgba.green 0 1 Basecolor.blue 0 2 rgba.blue 0 2"
+  name SBase
+  xpos 0
+  ypos 80
+ }
+set vBase [stack 0]
+push $Nin
+add_layer {Normal Normal.red Normal.green Normal.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name SNorm
+  xpos 120
+  ypos 80
+ }
+set vNorm [stack 0]
+push $Nin
+add_layer {Irradiance Irradiance.red Irradiance.green Irradiance.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name SIrr
+  xpos 240
+  ypos 80
+ }
+set vIrr [stack 0]
+push $Nin
+add_layer {Roughness Roughness.red Roughness.green Roughness.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Roughness
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Roughness.red 0 0 rgba.red 0 0 Roughness.green 0 1 rgba.green 0 1 Roughness.blue 0 2 rgba.blue 0 2"
+  name SRough
+  xpos 360
+  ypos 80
+ }
+set vRough [stack 0]
+push $Nin
+add_layer {Metallic Metallic.red Metallic.green Metallic.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Metallic
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Metallic.red 0 0 rgba.red 0 0 Metallic.green 0 1 rgba.green 0 1 Metallic.blue 0 2 rgba.blue 0 2"
+  name SMetal
+  xpos 480
+  ypos 80
+ }
+set vMetal [stack 0]
+push $Nin
+add_layer {Specular Specular.red Specular.green Specular.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Specular
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Specular.red 0 0 rgba.red 0 0 Specular.green 0 1 rgba.green 0 1 Specular.blue 0 2 rgba.blue 0 2"
+  name SSpec
+  xpos 600
+  ypos 80
+ }
+set vSpec [stack 0]
+
+ # push so TOP = input0 = baseImg (kernel declaration order)
+push $vSpec
+push $vMetal
+push $vRough
+push $vIrr
+push $vNorm
+push $vBase
+ BlinkScript {
+  inputs 6
+  recompileCount 1
+  ProgramGroup 1
+  kernelSource "kernel GGXDirLight : ImageComputationKernel<ePixelWise>\n\{\n    Image<eRead, eAccessPoint, eEdgeClamped> baseImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> normalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> irradImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> roughImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> metalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> specImg;\n    Image<eWrite, eAccessPoint, eEdgeClamped> outImg;\n\n    param:\n        float  lightHorizontal;\n        float  lightVertical;\n        float3 lightColor;\n        float  intensity;\n        float  originalMix;\n        float  wrapAmount;\n        float  lightOnly;\n\n    void define()\n    \{\n        defineParam(lightHorizontal, \"lightHorizontal\", 180.0f);\n        defineParam(lightVertical,   \"lightVertical\",   45.0f);\n        defineParam(lightColor,      \"lightColor\",      float3(1.0f, 1.0f, 1.0f));\n        defineParam(intensity,       \"intensity\",       1.0f);\n        defineParam(originalMix,     \"originalMix\",     0.0f);\n        defineParam(wrapAmount,      \"wrapAmount\",      0.0f);\n        defineParam(lightOnly,       \"lightOnly\",       0.0f);\n    \}\n\n    void process()\n    \{\n        float pi = 3.14159265358979f;\n\n        float radH = -lightHorizontal * (pi / 180.0f);\n        float radV = lightVertical * (pi / 180.0f);\n        float3 L;\n        L.x = cos(radV) * sin(radH);\n        L.y = sin(radV);\n        L.z = -cos(radV) * cos(radH);\n        L = normalize(L);\n\n        float3 N = normalImg().xyz;\n        N = N * 2.0f - 1.0f;\n        N = normalize(N);\n\n        float3 V = float3(0.0f, 0.0f, 1.0f);\n        float3 Hh = normalize(L + V);\n\n        float NdotL = max(dot(N, L), 0.0f);\n        float NdotV = max(dot(N, V), 0.0001f);\n        float NdotH = max(dot(N, Hh), 0.0f);\n        float VdotH = max(dot(V, Hh), 0.0f);\n\n        float rough = clamp(roughImg().x, 0.03f, 1.0f);\n        float a  = rough * rough;\n        float a2 = a * a;\n        float metal = clamp(metalImg().x, 0.0f, 1.0f);\n        float specv = clamp(specImg().x, 0.0f, 1.0f);\n        float3 albedo = baseImg().xyz;\n\n        if (lightOnly > 0.5f)\n        \{\n            albedo = float3(1.0f, 1.0f, 1.0f);\n            metal = 0.0f;\n        \}\n\n        float f0d = 0.08f * specv;\n        float3 F0;\n        F0.x = f0d * (1.0f - metal) + albedo.x * metal;\n        F0.y = f0d * (1.0f - metal) + albedo.y * metal;\n        F0.z = f0d * (1.0f - metal) + albedo.z * metal;\n\n        float denom = NdotH * NdotH * (a2 - 1.0f) + 1.0f;\n        float D = a2 / (pi * denom * denom + 0.0001f);\n\n        float k = a * 0.5f;\n        float gv = NdotV / (NdotV * (1.0f - k) + k);\n        float gl = NdotL / (NdotL * (1.0f - k) + k);\n        float G = gv * gl;\n\n        float fc = pow(1.0f - VdotH, 5.0f);\n        float3 F;\n        F.x = F0.x + (1.0f - F0.x) * fc;\n        F.y = F0.y + (1.0f - F0.y) * fc;\n        F.z = F0.z + (1.0f - F0.z) * fc;\n\n        float sd = 4.0f * NdotL * NdotV + 0.0001f;\n        float3 spec;\n        spec.x = D * G * F.x / sd;\n        spec.y = D * G * F.y / sd;\n        spec.z = D * G * F.z / sd;\n\n        float3 diff;\n        diff.x = (1.0f - F.x) * (1.0f - metal) * albedo.x / pi;\n        diff.y = (1.0f - F.y) * (1.0f - metal) * albedo.y / pi;\n        diff.z = (1.0f - F.z) * (1.0f - metal) * albedo.z / pi;\n\n        float wrapNL = clamp((dot(N, L) + wrapAmount) / (1.0f + wrapAmount), 0.0f, 1.0f);\n\n        float3 rad;\n        rad.x = lightColor.x * intensity;\n        rad.y = lightColor.y * intensity;\n        rad.z = lightColor.z * intensity;\n\n        float3 newTerm;\n        newTerm.x = (diff.x * wrapNL + spec.x * NdotL) * rad.x;\n        newTerm.y = (diff.y * wrapNL + spec.y * NdotL) * rad.y;\n        newTerm.z = (diff.z * wrapNL + spec.z * NdotL) * rad.z;\n\n        float omix = originalMix;\n        if (lightOnly > 0.5f) omix = 0.0f;\n\n        float3 irrad = irradImg().xyz;\n        float3 orig;\n        orig.x = baseImg().x * irrad.x;\n        orig.y = baseImg().y * irrad.y;\n        orig.z = baseImg().z * irrad.z;\n\n        float3 result;\n        result.x = newTerm.x * (1.0f - omix) + orig.x * omix;\n        result.y = newTerm.y * (1.0f - omix) + orig.y * omix;\n        result.z = newTerm.z * (1.0f - omix) + orig.z * omix;\n\n        outImg() = float4(result.x, result.y, result.z, 1.0f);\n    \}\n\};\n"
+  rebuild ""
+  GGXDirLight_lightHorizontal {{parent.lightHorizontal}}
+  GGXDirLight_lightVertical {{parent.lightVertical}}
+  GGXDirLight_lightColor {{parent.lightColor.r} {parent.lightColor.g} {parent.lightColor.b}}
+  GGXDirLight_intensity {{parent.lightIntensity}}
+  GGXDirLight_originalMix {{parent.original_mix}}
+  GGXDirLight_wrapAmount {{parent.wrap}}
+  GGXDirLight_lightOnly {{parent.light_only}}
+  rebuild_finalise ""
+  name BlinkScript1
+  xpos 300
+  ypos 200
+ }
+ Output {
+  name Output1
+  xpos 300
+  ypos 300
+ }
+end_group

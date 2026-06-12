@@ -1,0 +1,421 @@
+# RK_PBRController by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name PBR_Controller
+ tile_color 0x3399ccff
+ inputs 1
+ addUserKnob {20 PBR l "PBR Controller"}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit PBR Controller</b>\nAdjust passes before lighting.\nRoughness/Metallic/Specular derived from AOVs."}
+ addUserKnob {26 div_normal l "" +STARTLINE T "<font color='#888'>── Normal ──</font>"}
+ addUserKnob {7 normal_intensity l "Intensity" R 0 3}
+ normal_intensity 1
+ addUserKnob {6 flip_normal_y l "Flip Y (Green)" +STARTLINE}
+ addUserKnob {26 div_albedo l "" +STARTLINE T "<font color='#888'>── Albedo / Basecolor ──</font>"}
+ addUserKnob {7 basecolor_gain l "Gain" R 0 3}
+ basecolor_gain 1
+ addUserKnob {7 basecolor_saturation l "Saturation" R 0 3}
+ basecolor_saturation 1
+ addUserKnob {26 div_irradiance l "" +STARTLINE T "<font color='#888'>── Irradiance ──</font>"}
+ addUserKnob {7 irradiance_gain l "Gain" R 0 3}
+ irradiance_gain 1
+ addUserKnob {26 div_material l "" +STARTLINE T "<font color='#888'>── Material (derived from AOVs) ──</font>"}
+ addUserKnob {7 material_gain l "Gain" R 0 2}
+ material_gain 0
+ addUserKnob {26 div_mat_tune l "" +STARTLINE T "<font color='#888'>── Material tuning ──</font>"}
+ addUserKnob {7 spec_gain l "Spec Highlight Gain" R 0 16}
+ spec_gain 4
+ addUserKnob {7 irr_blur_size l "Spec Blur Radius" R 0 100}
+ irr_blur_size 20
+ addUserKnob {7 detail_gain l "Normal Detail Gain" R 0 16}
+ detail_gain 4
+ addUserKnob {7 norm_blur_size l "Detail Blur Radius" R 0 50}
+ norm_blur_size 4
+ addUserKnob {7 rough_floor l "Roughness Floor" R 0 1}
+ rough_floor 0.5
+ addUserKnob {7 rough_from_detail l "Rough <- Detail" R 0 2}
+ rough_from_detail 0.5
+ addUserKnob {7 rough_from_spec l "Rough <- Spec (inv)" R 0 2}
+ rough_from_spec 0.5
+ addUserKnob {7 ratio_gain l "Metal Ratio Gain" R 0 8}
+ ratio_gain 2
+ addUserKnob {7 metal_gain l "Metal Mask Gain" R 0 8}
+ metal_gain 2
+ addUserKnob {7 depth_near l "Metal Depth Near" R 0 1}
+ depth_near 0
+ addUserKnob {7 depth_far l "Metal Depth Far" R 0 1}
+ depth_far 1
+ addUserKnob {26 div_alpha l "" +STARTLINE T "<font color='#888'>── Alpha ──</font>"}
+ addUserKnob {7 alpha_erode l "Erode" R -20 20}
+ alpha_erode 0
+ addUserKnob {7 alpha_blur l "Edge Blur" R 0 20}
+ alpha_blur 0
+}
+ Input {
+  inputs 0
+  name PBR
+  xpos 300
+  ypos -100
+ }
+ Dot {
+  name DotIn
+  xpos 334
+  ypos -50
+ }
+set Ninput [stack 0]
+
+ # ══════════════════════════════════════════
+ # Normal: Shuffle to rgb -> Expression -> Copy back
+ # ══════════════════════════════════════════
+add_layer {Normal Normal.red Normal.green Normal.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name ExtractNormal
+  xpos 100
+  ypos 0
+ }
+ Expression {
+  temp_name0 nx
+  temp_expr0 "(r * 2.0 - 1.0) * parent.normal_intensity"
+  temp_name1 ny_raw
+  temp_expr1 "(g * 2.0 - 1.0)"
+  temp_name2 ny
+  temp_expr2 "(parent.flip_normal_y ? -ny_raw : ny_raw) * parent.normal_intensity"
+  temp_name3 nz
+  temp_expr3 "(b * 2.0 - 1.0) * parent.normal_intensity"
+  expr0 "nx * 0.5 + 0.5"
+  expr1 "ny * 0.5 + 0.5"
+  expr2 "nz * 0.5 + 0.5"
+  name AdjustNormal
+  xpos 100
+  ypos 60
+ }
+push $Ninput
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Normal.red
+  from1 rgba.green
+  to1 Normal.green
+  from2 rgba.blue
+  to2 Normal.blue
+  name CopyNormal
+  xpos 300
+  ypos 60
+ }
+set Nstream [stack 0]
+
+ # ══════════════════════════════════════════
+ # Basecolor: Shuffle to rgb -> Grade -> Saturation -> Copy back
+ # ══════════════════════════════════════════
+add_layer {Basecolor Basecolor.red Basecolor.green Basecolor.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Basecolor
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Basecolor.red 0 0 rgba.red 0 0 Basecolor.green 0 1 rgba.green 0 1 Basecolor.blue 0 2 rgba.blue 0 2"
+  name ExtractBasecolor
+  xpos 100
+  ypos 140
+ }
+ Grade {
+  channels rgb
+  multiply {{parent.basecolor_gain} {parent.basecolor_gain} {parent.basecolor_gain} 1}
+  name BasecolorGain
+  xpos 100
+  ypos 200
+ }
+ Saturation {
+  saturation {{parent.basecolor_saturation}}
+  name BasecolorSat
+  xpos 100
+  ypos 260
+ }
+push $Nstream
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Basecolor.red
+  from1 rgba.green
+  to1 Basecolor.green
+  from2 rgba.blue
+  to2 Basecolor.blue
+  name CopyBasecolor
+  xpos 300
+  ypos 260
+ }
+set Nstream [stack 0]
+
+ # ══════════════════════════════════════════
+ # Irradiance: Shuffle to rgb -> Grade -> Copy back
+ # ══════════════════════════════════════════
+add_layer {Irradiance Irradiance.red Irradiance.green Irradiance.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name ExtractIrradiance
+  xpos 100
+  ypos 340
+ }
+ Grade {
+  channels rgb
+  multiply {{parent.irradiance_gain} {parent.irradiance_gain} {parent.irradiance_gain} 1}
+  name IrradianceGain
+  xpos 100
+  ypos 400
+ }
+push $Nstream
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Irradiance.red
+  from1 rgba.green
+  to1 Irradiance.green
+  from2 rgba.blue
+  to2 Irradiance.blue
+  name CopyIrradiance
+  xpos 300
+  ypos 400
+ }
+set Nstream [stack 0]
+
+ # ══════════════════════════════════════════
+ # Alpha: Shuffle to rgb -> Erode -> Blur -> Copy back
+ # ══════════════════════════════════════════
+add_layer {Alpha Alpha.red}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Alpha
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Alpha.red 0 0 rgba.red 0 0 Alpha.red 0 0 rgba.green 0 1 Alpha.red 0 0 rgba.blue 0 2"
+  name ExtractAlpha
+  xpos 100
+  ypos 480
+ }
+ FilterErode {
+  channels rgb
+  size {{parent.alpha_erode}}
+  name ErodeAlpha
+  xpos 100
+  ypos 540
+ }
+ Blur {
+  channels rgb
+  size {{parent.alpha_blur}}
+  name BlurAlpha
+  xpos 100
+  ypos 600
+ }
+push $Nstream
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Alpha.red
+  name CopyAlpha
+  xpos 300
+  ypos 600
+ }
+set MatIn [stack 0]
+
+ # ══════════════════════════════════════════
+ # DERIVE Roughness / Metallic / Specular from AOVs
+ #   Specular  = highpass(Irradiance) -> bright sharp highlights
+ #   Roughness = floor + normalDetail*k - spec*k
+ #   Metallic  = |Albedo/Irr - 1| * normalDetail * depthMask
+ #   each * master slider
+ # Build aux branches, then combine in one BlinkScript.
+ # ══════════════════════════════════════════
+
+ # Irradiance sharp
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name MatIrrSharp
+  xpos -200
+  ypos 680
+ }
+set bIrrSharp [stack 0]
+
+ # Irradiance blurred (for spec highpass)
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name MatIrrForBlur
+  xpos -360
+  ypos 680
+ }
+ Blur {
+  channels rgb
+  size {{parent.irr_blur_size}}
+  name MatIrrBlur
+  xpos -360
+  ypos 740
+ }
+set bIrrBlur [stack 0]
+
+ # Normal sharp
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name MatNormSharp
+  xpos -520
+  ypos 680
+ }
+set bNormSharp [stack 0]
+
+ # Normal blurred (small, for detail highpass)
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name MatNormForBlur
+  xpos -680
+  ypos 680
+ }
+ Blur {
+  channels rgb
+  size {{parent.norm_blur_size}}
+  name MatNormBlur
+  xpos -680
+  ypos 740
+ }
+set bNormBlur [stack 0]
+
+ # Basecolor
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Basecolor
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Basecolor.red 0 0 rgba.red 0 0 Basecolor.green 0 1 rgba.green 0 1 Basecolor.blue 0 2 rgba.blue 0 2"
+  name MatBase
+  xpos -840
+  ypos 680
+ }
+set bBase [stack 0]
+
+ # Depth
+push $MatIn
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Depth
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Depth.red 0 0 rgba.red 0 0 Depth.red 0 0 rgba.green 0 1 Depth.red 0 0 rgba.blue 0 2"
+  name MatDepth
+  xpos -1000
+  ypos 680
+ }
+set bDepth [stack 0]
+
+ # Push 6 inputs so TOP = input0 = irrSharp (declaration order in kernel)
+push $bDepth
+push $bBase
+push $bNormBlur
+push $bNormSharp
+push $bIrrBlur
+push $bIrrSharp
+ BlinkScript {
+  inputs 6
+  recompileCount 1
+  ProgramGroup 1
+  kernelSource "kernel DeriveMaterial : ImageComputationKernel<ePixelWise>\n\{\n    Image<eRead, eAccessPoint, eEdgeClamped> irrSharp;\n    Image<eRead, eAccessPoint, eEdgeClamped> irrBlur;\n    Image<eRead, eAccessPoint, eEdgeClamped> normSharp;\n    Image<eRead, eAccessPoint, eEdgeClamped> normBlur;\n    Image<eRead, eAccessPoint, eEdgeClamped> baseImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> depthImg;\n    Image<eWrite, eAccessPoint, eEdgeClamped> dst;\n\n    param:\n        float specGain;\n        float ratioGain;\n        float detailGain;\n        float depthNear;\n        float depthFar;\n        float roughFromDetail;\n        float roughFromSpec;\n        float roughFloor;\n        float metalGain;\n        float roughMaster;\n        float metalMaster;\n        float specMaster;\n\n    void define()\n    \{\n        defineParam(specGain,        \"specGain\",        4.0f);\n        defineParam(ratioGain,       \"ratioGain\",       2.0f);\n        defineParam(detailGain,      \"detailGain\",      4.0f);\n        defineParam(depthNear,       \"depthNear\",       0.0f);\n        defineParam(depthFar,        \"depthFar\",        1.0f);\n        defineParam(roughFromDetail, \"roughFromDetail\", 0.5f);\n        defineParam(roughFromSpec,   \"roughFromSpec\",   0.5f);\n        defineParam(roughFloor,      \"roughFloor\",      0.5f);\n        defineParam(metalGain,       \"metalGain\",       2.0f);\n        defineParam(roughMaster,     \"roughMaster\",     1.0f);\n        defineParam(metalMaster,     \"metalMaster\",     1.0f);\n        defineParam(specMaster,      \"specMaster\",      1.0f);\n    \}\n\n    float luma(float3 c)\n    \{\n        return c.x * 0.2126f + c.y * 0.7152f + c.z * 0.0722f;\n    \}\n\n    void process()\n    \{\n        float irrL  = luma(irrSharp().xyz);\n        float irrLb = luma(irrBlur().xyz);\n        float specHi = max(0.0f, irrL - irrLb);\n        float specMap = clamp(specHi * specGain, 0.0f, 1.0f);\n\n        float3 hp = normSharp().xyz - normBlur().xyz;\n        float detail = clamp(length(hp) * detailGain, 0.0f, 1.0f);\n\n        float baseL = luma(baseImg().xyz);\n        float ratio = baseL / (irrL + 0.0001f);\n        float anomaly = clamp(fabs(ratio - 1.0f) * ratioGain, 0.0f, 1.0f);\n\n        float d = depthImg().x;\n        float dmask = clamp((depthFar - d) / (depthFar - depthNear + 0.0001f), 0.0f, 1.0f);\n\n        float rough = clamp(roughFloor + detail * roughFromDetail - specMap * roughFromSpec, 0.0f, 1.0f) * roughMaster;\n        float metal = clamp(anomaly * detail * dmask * metalGain, 0.0f, 1.0f) * metalMaster;\n        float spec  = specMap * specMaster;\n\n        dst() = float4(rough, metal, spec, 1.0f);\n    \}\n\};\n"
+  rebuild ""
+  DeriveMaterial_specGain {{parent.spec_gain}}
+  DeriveMaterial_ratioGain {{parent.ratio_gain}}
+  DeriveMaterial_detailGain {{parent.detail_gain}}
+  DeriveMaterial_depthNear {{parent.depth_near}}
+  DeriveMaterial_depthFar {{parent.depth_far}}
+  DeriveMaterial_roughFromDetail {{parent.rough_from_detail}}
+  DeriveMaterial_roughFromSpec {{parent.rough_from_spec}}
+  DeriveMaterial_roughFloor {{parent.rough_floor}}
+  DeriveMaterial_metalGain {{parent.metal_gain}}
+  DeriveMaterial_roughMaster {{parent.material_gain}}
+  DeriveMaterial_metalMaster {{parent.material_gain}}
+  DeriveMaterial_specMaster {{parent.material_gain}}
+  rebuild_finalise ""
+  name DeriveMaterial
+  xpos -360
+  ypos 820
+ }
+set MatOut [stack 0]
+
+ # ── Write derived values into named layers (mirror working Normal pattern) ──
+add_layer {Roughness Roughness.red Roughness.green Roughness.blue}
+push $MatOut
+push $MatIn
+ Copy {
+  inputs 2
+  from0 rgba.red
+  to0 Roughness.red
+  from1 rgba.red
+  to1 Roughness.green
+  from2 rgba.red
+  to2 Roughness.blue
+  name WriteRoughness
+  xpos 300
+  ypos 820
+ }
+set MatIn [stack 0]
+
+add_layer {Metallic Metallic.red Metallic.green Metallic.blue}
+push $MatOut
+push $MatIn
+ Copy {
+  inputs 2
+  from0 rgba.green
+  to0 Metallic.red
+  from1 rgba.green
+  to1 Metallic.green
+  from2 rgba.green
+  to2 Metallic.blue
+  name WriteMetallic
+  xpos 300
+  ypos 880
+ }
+set MatIn [stack 0]
+
+add_layer {Specular Specular.red Specular.green Specular.blue}
+push $MatOut
+push $MatIn
+ Copy {
+  inputs 2
+  from0 rgba.blue
+  to0 Specular.red
+  from1 rgba.blue
+  to1 Specular.green
+  from2 rgba.blue
+  to2 Specular.blue
+  name WriteSpecular
+  xpos 300
+  ypos 940
+ }
+ Output {
+  name Output1
+  xpos 300
+  ypos 1020
+ }
+end_group

@@ -1,0 +1,222 @@
+# RK_EnvironmentLight by Aleš Ushakou (https://www.linkedin.com/in/ales-ushakou/)
+Gizmo {
+ name RK_EnvironmentLight
+ tile_color 0x6699ccff
+ inputs 2
+ addUserKnob {20 ibl_control l "Light Control"}
+ addUserKnob {26 title l "" +STARTLINE T "<b>RelightKit Environment Light</b>\nGGX HDRI relighting (diffuse + specular IBL).\nInput 0: PBR packed stream (Depth layer needed for Localize)\nInput 1: HDRI (equirectangular)"}
+ addUserKnob {7 iblIntensity l Intensity R 0 10}
+ iblIntensity 1
+ addUserKnob {7 iblRotation l Rotation R 0 360}
+ addUserKnob {26 divider1 l "" +STARTLINE}
+ addUserKnob {7 diffuseBlur l "Diffuse Blur" R 0 200}
+ diffuseBlur 50
+ addUserKnob {7 original_mix l "Original Light"}
+ addUserKnob {26 divider_s l "" +STARTLINE T "Surface"}
+ addUserKnob {6 normal_signed l "Normals already signed (-1..1)" +STARTLINE}
+ normal_signed false
+ addUserKnob {26 divider_dl l "" +STARTLINE T "Depth Localize"}
+ addUserKnob {6 localize l "Localize by Depth" +STARTLINE}
+ localize false
+ addUserKnob {12 light_pos l "Anchor (screen)"}
+ light_pos {0 0}
+ addUserKnob {7 offset_z l "Offset Z (Depth)" R -1 1}
+ offset_z 0
+ addUserKnob {22 freeze_depth l "Freeze Depth" t "Sample the Depth under the Anchor handle and lock it so it stops recomputing." T "import nuke\n\nn = nuke.thisNode()\nx = n.knob('light_pos').value(0)\ny = n.knob('light_pos').value(1)\n\nv = None\ntry:\n    v = n.node('SDepth').sample('red', x, y)\nexcept Exception:\n    try:\n        v = n.input(0).sample('Depth.red', x, y)\n    except Exception:\n        v = None\n\nif v is not None:\n    n.knob('frozen_depth').setValue(float(v))\n    n.knob('use_frozen').setValue(True)\nelse:\n    nuke.message('Could not sample Depth under the handle.')" +STARTLINE}
+ addUserKnob {6 use_frozen l "Use Frozen Depth" +STARTLINE}
+ use_frozen false
+ addUserKnob {7 frozen_depth l "Frozen Depth" R 0 1}
+ frozen_depth 0
+ addUserKnob {7 depth_radius l "Depth Radius" R 0 20}
+ depth_radius 5
+ addUserKnob {7 depth_softness l "Depth Softness" R 0 1}
+ depth_softness 0.5
+ addUserKnob {26 divider2 l "" +STARTLINE T "Output"}
+ addUserKnob {6 light_only l "Light only (no albedo)" +STARTLINE}
+ light_only false
+}
+ Input {
+  inputs 0
+  name PBR
+  label "PBR Input"
+  xpos 320
+  ypos -15
+ }
+ Dot {
+  name DotPBR
+  xpos 354
+  ypos 40
+ }
+set Nin [stack 0]
+ Input {
+  inputs 0
+  name HDRI
+  label "HDRI Input"
+  xpos 700
+  ypos -15
+  number 1
+ }
+ Dot {
+  name DotHDRI
+  xpos 734
+  ypos 40
+ }
+set Nhdri [stack 0]
+
+ # ── HDRI: reformat to working size, make sharp + blurred versions ──
+push $Nhdri
+ Reformat {
+  type "to box"
+  box_width {{PBR.width}}
+  box_height {{PBR.height}}
+  box_fixed true
+  resize distort
+  filter Lanczos6
+  name ReformatHDRI
+  xpos 700
+  ypos 80
+ }
+set Hsharp [stack 0]
+push $Hsharp
+ Blur {
+  channels rgba
+  size {{parent.diffuseBlur}}
+  crop false
+  name HDRIBlur
+  xpos 560
+  ypos 140
+ }
+set Hblur [stack 0]
+
+ # ── PBR layer extracts ──
+push $Nin
+add_layer {Basecolor Basecolor.red Basecolor.green Basecolor.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Basecolor
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Basecolor.red 0 0 rgba.red 0 0 Basecolor.green 0 1 rgba.green 0 1 Basecolor.blue 0 2 rgba.blue 0 2"
+  name SBase
+  xpos 0
+  ypos 140
+ }
+set vBase [stack 0]
+push $Nin
+add_layer {Normal Normal.red Normal.green Normal.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Normal
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Normal.red 0 0 rgba.red 0 0 Normal.green 0 1 rgba.green 0 1 Normal.blue 0 2 rgba.blue 0 2"
+  name SNorm
+  xpos 120
+  ypos 140
+ }
+set vNorm [stack 0]
+push $Nin
+add_layer {Irradiance Irradiance.red Irradiance.green Irradiance.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Irradiance
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Irradiance.red 0 0 rgba.red 0 0 Irradiance.green 0 1 rgba.green 0 1 Irradiance.blue 0 2 rgba.blue 0 2"
+  name SIrr
+  xpos 240
+  ypos 140
+ }
+set vIrr [stack 0]
+push $Nin
+add_layer {Roughness Roughness.red Roughness.green Roughness.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Roughness
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Roughness.red 0 0 rgba.red 0 0 Roughness.green 0 1 rgba.green 0 1 Roughness.blue 0 2 rgba.blue 0 2"
+  name SRough
+  xpos 360
+  ypos 140
+ }
+set vRough [stack 0]
+push $Nin
+add_layer {Metallic Metallic.red Metallic.green Metallic.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Metallic
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Metallic.red 0 0 rgba.red 0 0 Metallic.green 0 1 rgba.green 0 1 Metallic.blue 0 2 rgba.blue 0 2"
+  name SMetal
+  xpos 480
+  ypos 140
+ }
+set vMetal [stack 0]
+push $Nin
+add_layer {Specular Specular.red Specular.green Specular.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Specular
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Specular.red 0 0 rgba.red 0 0 Specular.green 0 1 rgba.green 0 1 Specular.blue 0 2 rgba.blue 0 2"
+  name SSpec
+  xpos 600
+  ypos 140
+ }
+set vSpec [stack 0]
+push $Nin
+add_layer {Depth Depth.red Depth.green Depth.blue}
+ Shuffle2 {
+  fromInput1 {{0} B}
+  in1 Depth
+  out1 rgb
+  fromInput2 {{0} B}
+  mappings "3 Depth.red 0 0 rgba.red 0 0 Depth.green 0 1 rgba.green 0 1 Depth.blue 0 2 rgba.blue 0 2"
+  name SDepth
+  xpos 720
+  ypos 140
+ }
+set vDepth [stack 0]
+
+ # push so TOP = input0 = baseImg ; deepest = depthImg
+ push $vDepth
+ push $Hblur
+ push $Hsharp
+ push $vSpec
+ push $vMetal
+ push $vRough
+ push $vIrr
+ push $vNorm
+ push $vBase
+ BlinkScript {
+  inputs 9
+  recompileCount 1
+  ProgramGroup 1
+  kernelSource "kernel GGXEnvLight : ImageComputationKernel<ePixelWise>\n\{\n    Image<eRead, eAccessPoint, eEdgeClamped> baseImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> normalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> irradImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> roughImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> metalImg;\n    Image<eRead, eAccessPoint, eEdgeClamped> specImg;\n    Image<eRead, eAccessRandom, eEdgeClamped> hdriSharp;\n    Image<eRead, eAccessRandom, eEdgeClamped> hdriBlur;\n    Image<eRead, eAccessRandom, eEdgeClamped> depthImg;\n    Image<eWrite, eAccessPoint> outImg;\n\n    param:\n        float intensity;\n        float rotation;\n        float originalMix;\n        float lightOnly;\n        float normalSigned;\n        float localize;\n        float2 anchorUV;\n        float offsetZ;\n        float useFrozen;\n        float frozenDepth;\n        float depthRadius;\n        float depthSoftness;\n\n    local:\n        int2 hdriSize;\n        int2 compSize;\n\n    void define()\n    \{\n        defineParam(intensity,    \"intensity\",    1.0f);\n        defineParam(rotation,     \"rotation\",     0.0f);\n        defineParam(originalMix,  \"originalMix\",  0.0f);\n        defineParam(lightOnly,    \"lightOnly\",    0.0f);\n        defineParam(normalSigned, \"normalSigned\", 0.0f);\n        defineParam(localize,     \"localize\",     0.0f);\n        defineParam(anchorUV,     \"anchorUV\",     float2(0.5f, 0.5f));\n        defineParam(offsetZ,      \"offsetZ\",      0.0f);\n        defineParam(useFrozen,    \"useFrozen\",    0.0f);\n        defineParam(frozenDepth,  \"frozenDepth\",  0.0f);\n        defineParam(depthRadius,  \"depthRadius\",  5.0f);\n        defineParam(depthSoftness,\"depthSoftness\",0.5f);\n    \}\n\n    void init()\n    \{\n        hdriSize = hdriSharp.bounds.size();\n        compSize = outImg.bounds.size();\n    \}\n\n    void process(int2 pos)\n    \{\n        float pi = 3.14159265358979f;\n\n        float3 N = normalImg().xyz;\n        if (normalSigned < 0.5f) N = N * 2.0f - 1.0f;\n        N = normalize(N);\n\n        float3 V = float3(0.0f, 0.0f, 1.0f);\n        float NdotV = max(dot(N, V), 0.0001f);\n        float3 R = 2.0f * NdotV * N - V;\n        R = normalize(R);\n\n        float rough = clamp(roughImg().x, 0.03f, 1.0f);\n        float metal = clamp(metalImg().x, 0.0f, 1.0f);\n        float specv = clamp(specImg().x, 0.0f, 1.0f);\n        float3 albedo = baseImg().xyz;\n\n        if (lightOnly > 0.5f)\n        \{\n            albedo = float3(1.0f, 1.0f, 1.0f);\n            metal = 0.0f;\n        \}\n\n        float W = float(hdriSize.x);\n        float Hh = float(hdriSize.y);\n\n        float du = atan2(N.x, N.z) / (2.0f * pi) + 0.5f + rotation / 360.0f;\n        du = du - floor(du);\n        float dv = 0.5f - asin(clamp(N.y, -1.0f, 1.0f)) / pi;\n        float4 dE = bilinear(hdriBlur, du * W, dv * Hh);\n\n        float su = atan2(R.x, R.z) / (2.0f * pi) + 0.5f + rotation / 360.0f;\n        su = su - floor(su);\n        float sv = 0.5f - asin(clamp(R.y, -1.0f, 1.0f)) / pi;\n        float4 sS = bilinear(hdriSharp, su * W, sv * Hh);\n        float4 sB = bilinear(hdriBlur,  su * W, sv * Hh);\n        float3 specEnv;\n        specEnv.x = sS.x * (1.0f - rough) + sB.x * rough;\n        specEnv.y = sS.y * (1.0f - rough) + sB.y * rough;\n        specEnv.z = sS.z * (1.0f - rough) + sB.z * rough;\n\n        float f0d = 0.08f * specv;\n        float3 F0;\n        F0.x = f0d * (1.0f - metal) + albedo.x * metal;\n        F0.y = f0d * (1.0f - metal) + albedo.y * metal;\n        F0.z = f0d * (1.0f - metal) + albedo.z * metal;\n\n        float fc = pow(1.0f - NdotV, 5.0f);\n        float3 F;\n        F.x = F0.x + (max(1.0f - rough, F0.x) - F0.x) * fc;\n        F.y = F0.y + (max(1.0f - rough, F0.y) - F0.y) * fc;\n        F.z = F0.z + (max(1.0f - rough, F0.z) - F0.z) * fc;\n\n        float3 kd;\n        kd.x = (1.0f - F.x) * (1.0f - metal);\n        kd.y = (1.0f - F.y) * (1.0f - metal);\n        kd.z = (1.0f - F.z) * (1.0f - metal);\n\n        float3 diffuse;\n        diffuse.x = kd.x * albedo.x * dE.x;\n        diffuse.y = kd.y * albedo.y * dE.y;\n        diffuse.z = kd.z * albedo.z * dE.z;\n\n        float3 specular;\n        specular.x = F.x * specEnv.x;\n        specular.y = F.y * specEnv.y;\n        specular.z = F.z * specEnv.z;\n\n        float localFall = 1.0f;\n        if (localize > 0.5f)\n        \{\n            int hx = int(anchorUV.x * float(compSize.x));\n            int hy = int(anchorUV.y * float(compSize.y));\n            hx = max(0, min(hx, compSize.x - 1));\n            hy = max(0, min(hy, compSize.y - 1));\n            float depthA;\n            if (useFrozen > 0.5f) depthA = frozenDepth;\n            else depthA = depthImg(hx, hy).x;\n            float lightZ = depthA + offsetZ;\n            float depthP = depthImg(pos.x, pos.y).x;\n            float rz = max(depthRadius * 0.1f, 0.0001f);\n            float diffz = lightZ - depthP;\n            float az = max(diffz, -diffz) / rz;\n            float dt = clamp(az, 0.0f, 1.0f);\n            float inner = clamp(1.0f - depthSoftness, 0.0f, 1.0f);\n            float invInner = max(1.0f - inner, 0.0001f);\n            float dxx = clamp((dt - inner) / invInner, 0.0f, 1.0f);\n            float ds = dxx * dxx * (3.0f - 2.0f * dxx);\n            localFall = 1.0f - ds;\n        \}\n\n        float3 newTerm;\n        newTerm.x = (diffuse.x + specular.x) * intensity * localFall;\n        newTerm.y = (diffuse.y + specular.y) * intensity * localFall;\n        newTerm.z = (diffuse.z + specular.z) * intensity * localFall;\n\n        float omix = originalMix;\n        if (lightOnly > 0.5f) omix = 0.0f;\n\n        float3 irrad = irradImg().xyz;\n        float3 orig;\n        orig.x = baseImg().x * irrad.x;\n        orig.y = baseImg().y * irrad.y;\n        orig.z = baseImg().z * irrad.z;\n\n        float3 result;\n        result.x = newTerm.x * (1.0f - omix) + orig.x * omix;\n        result.y = newTerm.y * (1.0f - omix) + orig.y * omix;\n        result.z = newTerm.z * (1.0f - omix) + orig.z * omix;\n\n        outImg() = float4(result.x, result.y, result.z, 1.0f);\n    \}\n\};\n"
+  rebuild ""
+  GGXEnvLight_intensity {{parent.iblIntensity}}
+  GGXEnvLight_rotation {{parent.iblRotation}}
+  GGXEnvLight_originalMix {{parent.original_mix}}
+  GGXEnvLight_lightOnly {{parent.light_only}}
+  GGXEnvLight_normalSigned {{parent.normal_signed}}
+  GGXEnvLight_localize {{parent.localize}}
+  GGXEnvLight_anchorUV {{"parent.light_pos.x / PBR.width"} {"parent.light_pos.y / PBR.height"}}
+  GGXEnvLight_offsetZ {{parent.offset_z}}
+  GGXEnvLight_useFrozen {{parent.use_frozen}}
+  GGXEnvLight_frozenDepth {{parent.frozen_depth}}
+  GGXEnvLight_depthRadius {{parent.depth_radius}}
+  GGXEnvLight_depthSoftness {{parent.depth_softness}}
+  rebuild_finalise ""
+  name EnvLightBlink
+  xpos 320
+  ypos 280
+ }
+ Output {
+  name Output1
+  xpos 320
+  ypos 380
+ }
+end_group
